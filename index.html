@@ -13,9 +13,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <title>Dice</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden;
-                 touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-    #unity-canvas { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh;
+    /* ページ全体を画面に固定して、iPhone で引っぱったり触ったりしても上下にずれない（スクロールしない）ようにする */
+    html, body { margin: 0; padding: 0; position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: #000;
+                 overflow: hidden; overscroll-behavior: none;
+                 touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+                 -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+    #unity-canvas { position: fixed; left: 0; top: 0; width: 100%; height: 100%;
                     display: block; background: #000; outline: none; }
     #loading { position: fixed; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center;
                color: #8a8a8a; font: 14px -apple-system, "Hiragino Sans", sans-serif; letter-spacing: 0.1em; }
@@ -27,6 +30,23 @@
   <canvas id="unity-canvas" tabindex="-1"></canvas>
   <div id="loading">読み込み中<div id="bar"><div id="fill"></div></div></div>
   <script>
+    // iPhone の Safari は、overflow:hidden でも指の動き・入力欄への移動などで画面全体がずれる（上に押し上げられる）ことがある。
+    // ページを動かす操作を止め、ずれたらすぐ元の位置に戻す
+    (function () {
+      document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+      ["gesturestart", "gesturechange", "dblclick"].forEach(function (n) {
+        document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      function reset() { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }
+      window.addEventListener("scroll", reset);
+      window.addEventListener("resize", reset);
+      window.addEventListener("orientationchange", function () { setTimeout(reset, 300); });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("scroll", reset);
+        window.visualViewport.addEventListener("resize", reset);
+      }
+      document.addEventListener("focusin", function () { setTimeout(reset, 0); });
+    })();
     // 検証用（?diceStats のときだけ）：fps が落ちたとき、どこで時間を使っているかをブラウザ側から見る。
     //   画面更新 … ブラウザが描画の合図（requestAnimationFrame）を出している回数/秒。60 付近なら画面側は元気
     //   Unity描画 … そのうち Unity が実際に 1 コマ処理した回数/秒（fps の上限を守るため、残りは何もせず見送る）
@@ -180,16 +200,15 @@
       productName: "Dice",
       productVersion: "0.1.0",
       // 描画解像度は画面の 2 倍まで（iPhone の 3 倍だと描く量が 2.25 倍になり重い）。?diceHigh で端末の解像度そのまま
-      // 検証用：?diceDpr=1.5 などで描画解像度の倍率を指定（GPU の負担と fps の関係を見る）
+      // 描画解像度の倍率。?diceDpr=1.5 などで指定、?diceHigh は端末の倍率そのまま
       devicePixelRatio: (function () {
         var m = location.search.match(/diceDpr=([0-9.]+)/);
         if (m && parseFloat(m[1]) > 0) return parseFloat(m[1]);
         var dpr = window.devicePixelRatio || 1;
         if (location.search.indexOf("diceHigh") >= 0) return dpr;
-        // スマホ・タブレットは画面と同じ倍率（1 倍）で描く。iPhone は GPU を全力で動かせるのが十数秒だけで、
-        // 2 倍で描くと全力の間でも 1 コマ約 35ms、速さが落ちると約 70ms（12fps）になる。1 倍なら落ちても 30fps を保てる
-        var mobile = /iPhone|iPad|iPod|Android/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-        return mobile ? 1 : Math.min(dpr, 2);
+        // 画面（ボタン・文字）は最大 2 倍。スマホでは 3D だけを Unity 側で 1 倍相当に落として描く（SceneEnvironment.UpdateRenderScale）。
+        // iPhone は 3D を 2 倍で描くと GPU が十数秒で速さを落とされ 12fps 前後になるが、1 倍なら保てる
+        return Math.min(dpr, 2);
       })(),
     };
     var canvas = document.querySelector("#unity-canvas");
