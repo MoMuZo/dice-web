@@ -27,6 +27,84 @@
   <canvas id="unity-canvas" tabindex="-1"></canvas>
   <div id="loading">読み込み中<div id="bar"><div id="fill"></div></div></div>
   <script>
+    // 検証用（?diceStats のときだけ）：fps が落ちたとき、どこで時間を使っているかをブラウザ側から見る。
+    //   画面更新 … ブラウザが描画の合図（requestAnimationFrame）を出している回数/秒。60 付近なら画面側は元気
+    //   Unity描画 … そのうち Unity が実際に 1 コマ処理した回数/秒（fps の上限を守るため、残りは何もせず見送る）
+    //   処理 … Unity が 1 コマに使った時間（平均/最大）。この中で GPU の完了待ちをしていれば、ここに出る
+    //   Unity推定 … Unity が「この画面は何 Hz」と見積もっている値（Unity と同じ計算をここでも行う）
+    // 検証用：?diceNoAudio で音を実際には鳴らさない（Unity からは鳴らしたように見せる。音が原因かの切り分け）
+    (function () {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (location.search.indexOf("diceNoAudio") < 0 || !AC) return;
+      var orig = AC.prototype.createBufferSource;
+      AC.prototype.createBufferSource = function () {
+        var n = orig.apply(this, arguments), done = false;
+        var finish = function () { if (!done) { done = true; n.dispatchEvent(new Event("ended")); } };
+        n.start = function () { setTimeout(finish, 50); };
+        n.stop = function () { setTimeout(finish, 0); };
+        return n;
+      };
+    })();
+    (function () {
+      if (location.search.indexOf("diceStats") < 0) return;
+      // 音の部品（1 回鳴らすごとに 1 個作られる）が、鳴り終わっても残っていないかを数える
+      var made = 0, ended = 0;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      var noAudio = location.search.indexOf("diceNoAudio") >= 0;
+      if (AC && AC.prototype.createBufferSource) {
+        var cbs = AC.prototype.createBufferSource;
+        AC.prototype.createBufferSource = function () {
+          var n = cbs.apply(this, arguments);
+          made++;
+          n.addEventListener("ended", function () { ended++; });
+          return n;
+        };
+      }
+      var raf = window.requestAnimationFrame.bind(window);
+      var calls = 0, frames = 0, busy = 0, busyMax = 0, gapMax = 0, lastFrame = 0, est = 60;
+      window.requestAnimationFrame = function (fn) {
+        if (!fn || fn.name !== "Browser_mainLoop_runner") return raf(fn);
+        return raf(function (t) {
+          var s = performance.now();
+          fn(t);
+          var d = performance.now() - s;
+          calls++;
+          if (d > 0.3) { // 見送ったときは一瞬で戻る
+            frames++; busy += d; busyMax = Math.max(busyMax, d);
+            if (lastFrame) gapMax = Math.max(gapMax, s - lastFrame);
+            lastFrame = s;
+          }
+        });
+      };
+      // Unity 6 のフレームワークと同じ方法で画面の Hz を見積もる
+      var dts = Array(60).fill(1000 / 60), sums = Array(60).fill(1000), idx = 0, prev = performance.now();
+      raf(function loop(now) {
+        var dt = now - prev; prev = now;
+        var p = (idx + 59) % 60;
+        sums[idx] = sums[p] - dts[idx] + dt; dts[idx] = dt;
+        if (Math.max.apply(null, dts) < Math.min.apply(null, dts) + 3 && Math.max.apply(null, sums) < Math.min.apply(null, sums) + 8) {
+          var fr = 1000 / (sums[idx] / 60) | 0, cmp = [75, 144, 165, Math.round((fr + 5) / 10) * 10];
+          for (var i = 0; i < cmp.length; i++) if (Math.abs(fr - cmp[i]) < 2) fr = cmp[i];
+          est = fr;
+        }
+        idx = (idx + 1) % 60;
+        raf(loop);
+      });
+      var box = document.createElement("div");
+      box.style.cssText = "position:fixed;left:8px;top:96px;z-index:10;pointer-events:none;color:#ff0;font:12px/1.35 monospace;white-space:pre;text-shadow:0 0 2px #000";
+      document.addEventListener("DOMContentLoaded", function () { document.body.appendChild(box); });
+      var t0 = performance.now();
+      setInterval(function () {
+        var sec = (performance.now() - t0) / 1000; t0 = performance.now();
+        box.textContent =
+          "画面更新 " + (calls / sec).toFixed(0) + "/s  Unity描画 " + (frames / sec).toFixed(0) + "/s\n" +
+          "処理 平均 " + (frames ? busy / frames : 0).toFixed(1) + " ms  最大 " + busyMax.toFixed(0) + " ms  間隔最大 " + gapMax.toFixed(0) + " ms\n" +
+          "Unity推定 " + est + " Hz\n" +
+          "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended;
+        calls = frames = busy = busyMax = gapMax = 0;
+      }, 1000);
+    })();
+
     var buildUrl = "Build";
     var config = {
       dataUrl: buildUrl + "/WebGL.data.unityweb",
