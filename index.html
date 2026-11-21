@@ -32,6 +32,22 @@
     //   Unity描画 … そのうち Unity が実際に 1 コマ処理した回数/秒（fps の上限を守るため、残りは何もせず見送る）
     //   処理 … Unity が 1 コマに使った時間（平均/最大）。この中で GPU の完了待ちをしていれば、ここに出る
     //   Unity推定 … Unity が「この画面は何 Hz」と見積もっている値（Unity と同じ計算をここでも行う）
+    // 検証用：WebGL の画面を不透明にする（Unity は alpha:true・premultipliedAlpha:false で作るため、
+    // Safari が表示のたびに画面全体を変換している可能性がある）。
+    //   ?diceOpaque … alpha:false（透明部分なし。背景は黒なので見た目は同じ）
+    //   ?dicePremul … premultipliedAlpha:true だけ変える
+    (function () {
+      var opaque = location.search.indexOf("diceOpaque") >= 0, premul = location.search.indexOf("dicePremul") >= 0;
+      if (!opaque && !premul) return;
+      var gc = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, attr) {
+        if ((type === "webgl2" || type === "webgl") && attr) {
+          if (opaque) attr.alpha = false;
+          attr.premultipliedAlpha = true;
+        }
+        return gc.call(this, type, attr);
+      };
+    })();
     // 検証用：?diceNoAudio で音を実際には鳴らさない（Unity からは鳴らしたように見せる。音が原因かの切り分け）
     (function () {
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -128,13 +144,25 @@
         return "\nGL 1コマ: 描画 " + (draws / n).toFixed(0) + "  切替 " + ((glCount.bindFramebuffer || 0) / n).toFixed(0) +
           "  命令 " + (total / n).toFixed(0) + "  計 " + (totalT / n).toFixed(1) + " ms\n" + top;
       }
+      // Unity が作った WebGL を覚えておく（こちらから getContext を呼ぶと、Unity より先に既定の設定で作ってしまうため）
+      var unityGL = null, gc2 = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, attr) {
+        var r = gc2.call(this, type, attr);
+        if (r && (type === "webgl2" || type === "webgl") && this.id === "unity-canvas") unityGL = r;
+        return r;
+      };
+      function ctxInfo() {
+        var c = document.querySelector("#unity-canvas"), gl = unityGL;
+        var a = gl && gl.getContextAttributes ? gl.getContextAttributes() : null;
+        return a ? "alpha " + (a.alpha ? "あり" : "なし") + " premul " + (a.premultipliedAlpha ? "あり" : "なし") + " " + c.width + "x" + c.height : "?";
+      }
       var t0 = performance.now();
       setInterval(function () {
         var sec = (performance.now() - t0) / 1000; t0 = performance.now();
         box.textContent =
           "画面更新 " + (calls / sec).toFixed(0) + "/s  Unity描画 " + (frames / sec).toFixed(0) + "/s\n" +
           "処理 平均 " + (frames ? busy / frames : 0).toFixed(1) + " ms  最大 " + busyMax.toFixed(0) + " ms  間隔最大 " + gapMax.toFixed(0) + " ms\n" +
-          "Unity推定 " + est + " Hz\n" +
+          "Unity推定 " + est + " Hz\n画面 " + ctxInfo() + "\n" +
           "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended +
           (glOn ? glSummary(frames) : "");
         calls = frames = busy = busyMax = gapMax = 0;
