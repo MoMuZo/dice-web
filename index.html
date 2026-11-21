@@ -184,7 +184,12 @@
       devicePixelRatio: (function () {
         var m = location.search.match(/diceDpr=([0-9.]+)/);
         if (m && parseFloat(m[1]) > 0) return parseFloat(m[1]);
-        return location.search.indexOf("diceHigh") >= 0 ? (window.devicePixelRatio || 1) : Math.min(window.devicePixelRatio || 1, 2);
+        var dpr = window.devicePixelRatio || 1;
+        if (location.search.indexOf("diceHigh") >= 0) return dpr;
+        // スマホ・タブレットは画面と同じ倍率（1 倍）で描く。iPhone は GPU を全力で動かせるのが十数秒だけで、
+        // 2 倍で描くと全力の間でも 1 コマ約 35ms、速さが落ちると約 70ms（12fps）になる。1 倍なら落ちても 30fps を保てる
+        var mobile = /iPhone|iPad|iPod|Android/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        return mobile ? 1 : Math.min(dpr, 2);
       })(),
     };
     var canvas = document.querySelector("#unity-canvas");
