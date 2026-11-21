@@ -152,7 +152,12 @@
       productName: "Dice",
       productVersion: "0.1.0",
       // 描画解像度は画面の 2 倍まで（iPhone の 3 倍だと描く量が 2.25 倍になり重い）。?diceHigh で端末の解像度そのまま
-      devicePixelRatio: location.search.indexOf("diceHigh") >= 0 ? (window.devicePixelRatio || 1) : Math.min(window.devicePixelRatio || 1, 2),
+      // 検証用：?diceDpr=1.5 などで描画解像度の倍率を指定（GPU の負担と fps の関係を見る）
+      devicePixelRatio: (function () {
+        var m = location.search.match(/diceDpr=([0-9.]+)/);
+        if (m && parseFloat(m[1]) > 0) return parseFloat(m[1]);
+        return location.search.indexOf("diceHigh") >= 0 ? (window.devicePixelRatio || 1) : Math.min(window.devicePixelRatio || 1, 2);
+      })(),
     };
     var canvas = document.querySelector("#unity-canvas");
     var fill = document.querySelector("#fill");
