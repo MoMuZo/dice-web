@@ -32,8 +32,34 @@
     //   Unity描画 … そのうち Unity が実際に 1 コマ処理した回数/秒（fps の上限を守るため、残りは何もせず見送る）
     //   処理 … Unity が 1 コマに使った時間（平均/最大）。この中で GPU の完了待ちをしていれば、ここに出る
     //   Unity推定 … Unity が「この画面は何 Hz」と見積もっている値（Unity と同じ計算をここでも行う）
+    // 検証用：?diceNoAudio で音を実際には鳴らさない（Unity からは鳴らしたように見せる。音が原因かの切り分け）
+    (function () {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (location.search.indexOf("diceNoAudio") < 0 || !AC) return;
+      var orig = AC.prototype.createBufferSource;
+      AC.prototype.createBufferSource = function () {
+        var n = orig.apply(this, arguments), done = false;
+        var finish = function () { if (!done) { done = true; n.dispatchEvent(new Event("ended")); } };
+        n.start = function () { setTimeout(finish, 50); };
+        n.stop = function () { setTimeout(finish, 0); };
+        return n;
+      };
+    })();
     (function () {
       if (location.search.indexOf("diceStats") < 0) return;
+      // 音の部品（1 回鳴らすごとに 1 個作られる）が、鳴り終わっても残っていないかを数える
+      var made = 0, ended = 0;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      var noAudio = location.search.indexOf("diceNoAudio") >= 0;
+      if (AC && AC.prototype.createBufferSource) {
+        var cbs = AC.prototype.createBufferSource;
+        AC.prototype.createBufferSource = function () {
+          var n = cbs.apply(this, arguments);
+          made++;
+          n.addEventListener("ended", function () { ended++; });
+          return n;
+        };
+      }
       var raf = window.requestAnimationFrame.bind(window);
       var calls = 0, frames = 0, busy = 0, busyMax = 0, gapMax = 0, lastFrame = 0, est = 60;
       window.requestAnimationFrame = function (fn) {
@@ -73,7 +99,8 @@
         box.textContent =
           "画面更新 " + (calls / sec).toFixed(0) + "/s  Unity描画 " + (frames / sec).toFixed(0) + "/s\n" +
           "処理 平均 " + (frames ? busy / frames : 0).toFixed(1) + " ms  最大 " + busyMax.toFixed(0) + " ms  間隔最大 " + gapMax.toFixed(0) + " ms\n" +
-          "Unity推定 " + est + " Hz";
+          "Unity推定 " + est + " Hz\n" +
+          "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended;
         calls = frames = busy = busyMax = gapMax = 0;
       }, 1000);
     })();
