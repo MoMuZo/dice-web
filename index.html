@@ -60,6 +60,26 @@
           return n;
         };
       }
+      // ?diceGL：Unity が出している描画命令（WebGL の呼び出し）を数え、どの命令で時間を使っているかを測る
+      var glOn = location.search.indexOf("diceGL") >= 0, glCount = {}, glTime = {};
+      if (glOn) {
+        [window.WebGL2RenderingContext, window.WebGLRenderingContext].forEach(function (C) {
+          if (!C) return;
+          var proto = C.prototype;
+          Object.getOwnPropertyNames(proto).forEach(function (k) {
+            var d = Object.getOwnPropertyDescriptor(proto, k);
+            if (!d || typeof d.value !== "function" || k === "constructor") return;
+            var f = d.value;
+            proto[k] = function () {
+              var s = performance.now();
+              var r = f.apply(this, arguments);
+              glTime[k] = (glTime[k] || 0) + performance.now() - s;
+              glCount[k] = (glCount[k] || 0) + 1;
+              return r;
+            };
+          });
+        });
+      }
       var raf = window.requestAnimationFrame.bind(window);
       var calls = 0, frames = 0, busy = 0, busyMax = 0, gapMax = 0, lastFrame = 0, est = 60;
       window.requestAnimationFrame = function (fn) {
@@ -93,6 +113,21 @@
       var box = document.createElement("div");
       box.style.cssText = "position:fixed;left:8px;top:96px;z-index:10;pointer-events:none;color:#ff0;font:12px/1.35 monospace;white-space:pre;text-shadow:0 0 2px #000";
       document.addEventListener("DOMContentLoaded", function () { document.body.appendChild(box); });
+      // 1 コマあたりの値にして表示：描画回数・画面の切り替え回数・命令の総数と時間、時間を使っている命令の上位
+      function glSummary(n) {
+        n = Math.max(1, n);
+        var draws = 0, total = 0, totalT = 0, keys = Object.keys(glCount);
+        keys.forEach(function (k) {
+          total += glCount[k]; totalT += glTime[k];
+          if (k.indexOf("draw") === 0) draws += glCount[k];
+        });
+        keys.sort(function (a, b) { return glTime[b] - glTime[a]; });
+        var top = keys.slice(0, 4).map(function (k) {
+          return "  " + k + " " + (glTime[k] / n).toFixed(1) + "ms x" + (glCount[k] / n).toFixed(0);
+        }).join("\n");
+        return "\nGL 1コマ: 描画 " + (draws / n).toFixed(0) + "  切替 " + ((glCount.bindFramebuffer || 0) / n).toFixed(0) +
+          "  命令 " + (total / n).toFixed(0) + "  計 " + (totalT / n).toFixed(1) + " ms\n" + top;
+      }
       var t0 = performance.now();
       setInterval(function () {
         var sec = (performance.now() - t0) / 1000; t0 = performance.now();
@@ -100,8 +135,10 @@
           "画面更新 " + (calls / sec).toFixed(0) + "/s  Unity描画 " + (frames / sec).toFixed(0) + "/s\n" +
           "処理 平均 " + (frames ? busy / frames : 0).toFixed(1) + " ms  最大 " + busyMax.toFixed(0) + " ms  間隔最大 " + gapMax.toFixed(0) + " ms\n" +
           "Unity推定 " + est + " Hz\n" +
-          "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended;
+          "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended +
+          (glOn ? glSummary(frames) : "");
         calls = frames = busy = busyMax = gapMax = 0;
+        glCount = {}; glTime = {};
       }, 1000);
     })();
 
