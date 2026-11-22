@@ -221,6 +221,8 @@
       function fit() {
         var portrait = window.matchMedia("(orientation: portrait)").matches;
         var h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+        // キャンバスだけ伸ばしても、外側（html・body）が短いままだとそこで切れて見えるので、外側も同じ高さにする
+        [document.documentElement, document.body].forEach(function (el) { el.style.bottom = "auto"; el.style.height = h + "px"; });
         canvas.style.height = h + "px";
       }
       fit();
