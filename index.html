@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Dice">
   <meta name="theme-color" content="#000000">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -214,21 +214,6 @@
       })(),
     };
     var canvas = document.querySelector("#unity-canvas");
-    // ホーム画面から開いたとき（ステータスバー半透明）、iOS はページの高さをステータスバーの分だけ短く伝えるため、
-    // 100% だと下に黒い隙間ができる。ホーム画面アプリは常に画面全体に表示されるので、画面そのものの高さを使う
-    (function () {
-      if (!navigator.standalone) return;
-      function fit() {
-        var portrait = window.matchMedia("(orientation: portrait)").matches;
-        var h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-        // キャンバスだけ伸ばしても、外側（html・body）が短いままだとそこで切れて見えるので、外側も同じ高さにする
-        [document.documentElement, document.body].forEach(function (el) { el.style.bottom = "auto"; el.style.height = h + "px"; });
-        canvas.style.height = h + "px";
-      }
-      fit();
-      window.addEventListener("resize", fit);
-      window.addEventListener("orientationchange", function () { setTimeout(fit, 300); });
-    })();
     var fill = document.querySelector("#fill");
     var loading = document.querySelector("#loading");
     var script = document.createElement("script");
