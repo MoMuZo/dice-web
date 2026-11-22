@@ -183,6 +183,8 @@
           "画面更新 " + (calls / sec).toFixed(0) + "/s  Unity描画 " + (frames / sec).toFixed(0) + "/s\n" +
           "処理 平均 " + (frames ? busy / frames : 0).toFixed(1) + " ms  最大 " + busyMax.toFixed(0) + " ms  間隔最大 " + gapMax.toFixed(0) + " ms\n" +
           "Unity推定 " + est + " Hz\n画面 " + ctxInfo() + "\n" +
+          "高さ 表示 " + innerHeight + "  画面 " + screen.height + "  描画 " + document.querySelector("#unity-canvas").clientHeight +
+          "  body " + document.body.clientHeight + (navigator.standalone ? "  ホーム画面" : "") + "\n" +
           "音" + (noAudio ? "（鳴らさない設定）" : "") + " 鳴らした " + made + "  鳴り終わり " + ended +
           (glOn ? glSummary(frames) : "");
         calls = frames = busy = busyMax = gapMax = 0;
@@ -212,6 +214,19 @@
       })(),
     };
     var canvas = document.querySelector("#unity-canvas");
+    // ホーム画面から開いたとき（ステータスバー半透明）、iOS はページの高さをステータスバーの分だけ短く伝えるため、
+    // 100% だと下に黒い隙間ができる。ホーム画面アプリは常に画面全体に表示されるので、画面そのものの高さを使う
+    (function () {
+      if (!navigator.standalone) return;
+      function fit() {
+        var portrait = window.matchMedia("(orientation: portrait)").matches;
+        var h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+        canvas.style.height = h + "px";
+      }
+      fit();
+      window.addEventListener("resize", fit);
+      window.addEventListener("orientationchange", function () { setTimeout(fit, 300); });
+    })();
     var fill = document.querySelector("#fill");
     var loading = document.querySelector("#loading");
     var script = document.createElement("script");
